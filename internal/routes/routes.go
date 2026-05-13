@@ -33,6 +33,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 
 	authHandler := handlers.NewAuthHandler(authService)
 	authMiddleware := middlewares.NewAuthMiddleware(jwtConfig.Secret)
+	roleMiddleware := middlewares.NewRoleMiddleware()
 
 	router.GET("/health", healthHandler.HealthCheck)
 
@@ -47,7 +48,20 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 			auth.GET("/me", authMiddleware.RequireAuth(), authHandler.Me)
 		}
 
-		api.GET("/stores", storeHandler.FindAll)
-		api.GET("/branches", branchHandler.FindAll)
+		protected := api.Group("")
+		protected.Use(authMiddleware.RequireAuth())
+		{
+			protected.GET(
+				"/stores",
+				roleMiddleware.RequireRoles("superadmin", "admin"),
+				storeHandler.FindAll,
+			)
+
+			protected.GET(
+				"/branches",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				branchHandler.FindAll,
+			)
+		}
 	}
 }
