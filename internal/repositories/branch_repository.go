@@ -6,6 +6,7 @@ import (
 
 	"pos-saas-backend/internal/helpers"
 	"pos-saas-backend/internal/models"
+	"pos-saas-backend/internal/requests"
 )
 
 type BranchRepository struct {
@@ -78,4 +79,176 @@ func (r *BranchRepository) FindAll(ctx context.Context) ([]models.Branch, error)
 	}
 
 	return branches, nil
+}
+
+func (r *BranchRepository) FindByID(ctx context.Context, id int64) (*models.Branch, error) {
+	query := `
+		SELECT
+			b.id,
+			b.store_id,
+			s.name AS store_name,
+			b.name,
+			b.code,
+			b.address,
+			b.phone,
+			b.is_active,
+			b.created_at,
+			b.updated_at
+		FROM branches b
+		INNER JOIN stores s ON s.id = b.store_id
+		WHERE b.id = $1
+		AND b.deleted_at IS NULL
+		LIMIT 1
+	`
+
+	var branch models.Branch
+	var address sql.NullString
+	var phone sql.NullString
+
+	err := r.DB.QueryRowContext(ctx, query, id).Scan(
+		&branch.ID,
+		&branch.StoreID,
+		&branch.StoreName,
+		&branch.Name,
+		&branch.Code,
+		&address,
+		&phone,
+		&branch.IsActive,
+		&branch.CreatedAt,
+		&branch.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	branch.Address = helpers.NullableString(address)
+	branch.Phone = helpers.NullableString(phone)
+
+	return &branch, nil
+}
+
+func (r *BranchRepository) Create(ctx context.Context, request requests.BranchRequest) (*models.Branch, error) {
+	isActive := true
+	if request.IsActive != nil {
+		isActive = *request.IsActive
+	}
+
+	query := `
+		INSERT INTO branches (
+			store_id,
+			name,
+			code,
+			address,
+			phone,
+			is_active
+		) VALUES (
+			$1,
+			$2,
+			$3,
+			NULLIF($4, ''),
+			NULLIF($5, ''),
+			$6
+		)
+		RETURNING
+			id
+	`
+
+	var branchID int64
+
+	err := r.DB.QueryRowContext(
+		ctx,
+		query,
+		request.StoreID,
+		request.Name,
+		request.Code,
+		request.Address,
+		request.Phone,
+		isActive,
+	).Scan(&branchID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return r.FindByID(ctx, branchID)
+}
+
+func (r *BranchRepository) Update(ctx context.Context, id int64, request requests.BranchRequest) (*models.Branch, error) {
+	currentBranch, err := r.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if currentBranch == nil {
+		return nil, nil
+	}
+
+	isActive := currentBranch.IsActive
+	if request.IsActive != nil {
+		isActive = *request.IsActive
+	}
+
+	query := `
+		UPDATE branches
+		SET
+			store_id = $1,
+			name = $2,
+			code = $3,
+			address = NULLIF($4, ''),
+			phone = NULLIF($5, ''),
+			is_active = $6,
+			updated_at = NOW()
+		WHERE id = $7
+		AND deleted_at IS NULL
+		RETURNING
+			id
+	`
+
+	var branchID int64
+
+	err = r.DB.QueryRowContext(
+		ctx,
+		query,
+		request.StoreID,
+		request.Name,
+		request.Code,
+		request.Address,
+		request.Phone,
+		isActive,
+		id,
+	).Scan(&branchID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return r.FindByID(ctx, branchID)
+}
+
+func (r *BranchRepository) Delete(ctx context.Context, id int64) (bool, error) {
+	query := `
+		UPDATE branches
+		SET
+			deleted_at = NOW(),
+			updated_at = NOW()
+		WHERE id = $1
+		AND deleted_at IS NULL
+	`
+
+	result, err := r.DB.ExecContext(ctx, query, id)
+	if err != nil {
+		return false, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+
+	return rowsAffected > 0, nil
 }

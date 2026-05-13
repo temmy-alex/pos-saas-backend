@@ -86,6 +86,30 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
 				branchHandler.FindAll,
 			)
+
+			protected.POST(
+				"/branches",
+				roleMiddleware.RequireRoles("superadmin"),
+				branchHandler.Create,
+			)
+
+			protected.GET(
+				"/branches/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				branchHandler.FindByID,
+			)
+
+			protected.PUT(
+				"/branches/:id",
+				roleMiddleware.RequireRoles("superadmin"),
+				branchHandler.Update,
+			)
+
+			protected.DELETE(
+				"/branches/:id",
+				roleMiddleware.RequireRoles("superadmin"),
+				branchHandler.Delete,
+			)
 		}
 	}
 }
