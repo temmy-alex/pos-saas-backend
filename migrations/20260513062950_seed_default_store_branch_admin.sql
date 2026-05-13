@@ -46,7 +46,7 @@ INSERT INTO users (
     NULL,
     'Super Admin',
     'admin@possaas.test',
-    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
+    '$2a$10$BzUIGTKiNclwSPpPcVExSu5/rtOCIpKvrrhelA3zZBfQA7ItZWgLy',
     'superadmin',
     TRUE
 )
