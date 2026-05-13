@@ -57,6 +57,30 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 				storeHandler.FindAll,
 			)
 
+			protected.POST(
+				"/stores",
+				roleMiddleware.RequireRoles("superadmin"),
+				storeHandler.Create,
+			)
+
+			protected.GET(
+				"/stores/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin"),
+				storeHandler.FindByID,
+			)
+
+			protected.PUT(
+				"/stores/:id",
+				roleMiddleware.RequireRoles("superadmin"),
+				storeHandler.Update,
+			)
+
+			protected.DELETE(
+				"/stores/:id",
+				roleMiddleware.RequireRoles("superadmin"),
+				storeHandler.Delete,
+			)
+
 			protected.GET(
 				"/branches",
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
