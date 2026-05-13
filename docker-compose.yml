@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pos_saas_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pos_saas_db
+      POSTGRES_USER: pos_user
+      POSTGRES_PASSWORD: pos_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - pos_saas_postgres_data:/var/lib/postgresql/data
+    networks:
+      - pos_saas_network
+
+volumes:
+  pos_saas_postgres_data:
+
+networks:
+  pos_saas_network:
+    driver: bridge
