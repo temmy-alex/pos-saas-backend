@@ -23,6 +23,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	branchRepository := repositories.NewBranchRepository(db)
 	categoryRepository := repositories.NewCategoryRepository(db)
 	productRepository := repositories.NewProductRepository(db)
+	transactionRepository := repositories.NewTransactionRepository(db)
 	userRepository := repositories.NewUserRepository(db)
 
 	storeHandler := handlers.NewStoreHandler(storeRepository)
@@ -31,6 +32,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 
 	localStorageService := services.NewLocalStorageService(appConfig.AppBaseURL)
 	productHandler := handlers.NewProductHandler(productRepository, localStorageService)
+	transactionHandler := handlers.NewTransactionHandler(transactionRepository)
 
 	authService := services.NewAuthService(
 		userRepository,
@@ -176,6 +178,24 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 				"/products/:id",
 				roleMiddleware.RequireRoles("superadmin", "admin"),
 				productHandler.Delete,
+			)
+
+			protected.GET(
+				"/transactions",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				transactionHandler.FindAll,
+			)
+
+			protected.POST(
+				"/transactions",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				transactionHandler.Create,
+			)
+
+			protected.GET(
+				"/transactions/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				transactionHandler.FindByID,
 			)
 		}
 	}
