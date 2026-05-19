@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -31,16 +32,45 @@ func NewProductHandler(
 }
 
 func (h *ProductHandler) FindAll(c *gin.Context) {
+	var filter requests.ProductFilterRequest
+
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid query parameters", err.Error())
+		return
+	}
+
+	filter = normalizeProductFilter(filter)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	products, err := h.ProductRepository.FindAll(ctx)
+	products, total, err := h.ProductRepository.FindAll(ctx, filter)
 	if err != nil {
 		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get products", err.Error())
 		return
 	}
 
-	helpers.SuccessResponse(c, http.StatusOK, "Products retrieved successfully", products)
+	totalPages := int64(0)
+	if filter.Limit > 0 {
+		totalPages = int64(math.Ceil(float64(total) / float64(filter.Limit)))
+	}
+
+	helpers.SuccessResponse(c, http.StatusOK, "Products retrieved successfully", gin.H{
+		"items": products,
+		"pagination": gin.H{
+			"page":        filter.Page,
+			"limit":       filter.Limit,
+			"total":       total,
+			"total_pages": totalPages,
+		},
+		"filters": gin.H{
+			"store_id":    filter.StoreID,
+			"branch_id":   filter.BranchID,
+			"category_id": filter.CategoryID,
+			"search":      filter.Search,
+			"is_active":   filter.IsActive,
+		},
+	})
 }
 
 func (h *ProductHandler) FindByID(c *gin.Context) {
@@ -178,4 +208,20 @@ func (h *ProductHandler) handleProductImage(c *gin.Context, request *requests.Pr
 	request.ImageDisk = &uploadedFile.Disk
 
 	return nil
+}
+
+func normalizeProductFilter(filter requests.ProductFilterRequest) requests.ProductFilterRequest {
+	if filter.Page <= 0 {
+		filter.Page = 1
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = 10
+	}
+
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+
+	return filter
 }
