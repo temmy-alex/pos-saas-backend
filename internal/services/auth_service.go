@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"pos-saas-backend/internal/auth"
 	"pos-saas-backend/internal/models"
 	"pos-saas-backend/internal/repositories"
 	"pos-saas-backend/internal/requests"
@@ -18,16 +19,6 @@ type AuthService struct {
 	UserRepository               *repositories.UserRepository
 	JWTSecret                    string
 	JWTAccessTokenExpiresMinutes int
-}
-
-type AuthClaims struct {
-	UserID   int64  `json:"user_id"`
-	StoreID  *int64 `json:"store_id"`
-	BranchID *int64 `json:"branch_id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	jwt.RegisteredClaims
 }
 
 func NewAuthService(
@@ -84,7 +75,7 @@ func (s *AuthService) GenerateAccessToken(user *models.User) (string, time.Time,
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(s.JWTAccessTokenExpiresMinutes) * time.Minute)
 
-	claims := AuthClaims{
+	claims := auth.Claims{
 		UserID:   user.ID,
 		StoreID:  user.StoreID,
 		BranchID: user.BranchID,

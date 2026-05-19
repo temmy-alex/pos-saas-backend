@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"pos-saas-backend/internal/services"
+	"pos-saas-backend/internal/auth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -52,7 +52,7 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		claims := &services.AuthClaims{}
+		claims := &auth.Claims{}
 
 		token, err := jwt.ParseWithClaims(
 			tokenString,

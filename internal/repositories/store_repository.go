@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"pos-saas-backend/internal/helpers"
 	"pos-saas-backend/internal/models"
@@ -19,8 +21,21 @@ func NewStoreRepository(db *sql.DB) *StoreRepository {
 	}
 }
 
-func (r *StoreRepository) FindAll(ctx context.Context) ([]models.Store, error) {
-	query := `
+func (r *StoreRepository) FindAll(ctx context.Context, storeID int64) ([]models.Store, error) {
+	whereClauses := []string{
+		"deleted_at IS NULL",
+	}
+
+	args := make([]interface{}, 0)
+	argPosition := 1
+
+	if storeID > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("id = $%d", argPosition))
+		args = append(args, storeID)
+		argPosition++
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			id,
 			name,
@@ -31,11 +46,11 @@ func (r *StoreRepository) FindAll(ctx context.Context) ([]models.Store, error) {
 			created_at,
 			updated_at
 		FROM stores
-		WHERE deleted_at IS NULL
+		WHERE %s
 		ORDER BY id ASC
-	`
+	`, strings.Join(whereClauses, " AND "))
 
-	rows, err := r.DB.QueryContext(ctx, query)
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

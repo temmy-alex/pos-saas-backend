@@ -24,10 +24,28 @@ func NewBranchHandler(branchRepository *repositories.BranchRepository) *BranchHa
 }
 
 func (h *BranchHandler) FindAll(c *gin.Context) {
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	storeID, err := helpers.ApplyStoreScope(scope, 0)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	branchID, err := helpers.ApplyBranchScope(scope, 0)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	branches, err := h.BranchRepository.FindAll(ctx)
+	branches, err := h.BranchRepository.FindAll(ctx, storeID, branchID)
 	if err != nil {
 		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get branches", err.Error())
 		return
@@ -40,6 +58,17 @@ func (h *BranchHandler) FindByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid branch id", err.Error())
+		return
+	}
+
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, id); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
 		return
 	}
 
@@ -57,6 +86,11 @@ func (h *BranchHandler) FindByID(c *gin.Context) {
 		return
 	}
 
+	if err := helpers.EnsureStoreAccess(scope, branch.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
 	helpers.SuccessResponse(c, http.StatusOK, "Branch retrieved successfully", branch)
 }
 
@@ -65,6 +99,17 @@ func (h *BranchHandler) Create(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+		return
+	}
+
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, request.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
 		return
 	}
 
@@ -94,8 +139,35 @@ func (h *BranchHandler) Update(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, request.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	existingBranch, err := h.BranchRepository.FindByID(ctx, id)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get branch", err.Error())
+		return
+	}
+
+	if existingBranch == nil {
+		helpers.ErrorResponse(c, http.StatusNotFound, "Branch not found", "branch data not found")
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, existingBranch.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
 
 	branch, err := h.BranchRepository.Update(ctx, id, request)
 	if err != nil {
@@ -118,8 +190,30 @@ func (h *BranchHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	existingBranch, err := h.BranchRepository.FindByID(ctx, id)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get branch", err.Error())
+		return
+	}
+
+	if existingBranch == nil {
+		helpers.ErrorResponse(c, http.StatusNotFound, "Branch not found", "branch data not found")
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, existingBranch.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
 
 	deleted, err := h.BranchRepository.Delete(ctx, id)
 	if err != nil {

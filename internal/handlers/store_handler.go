@@ -24,10 +24,22 @@ func NewStoreHandler(storeRepository *repositories.StoreRepository) *StoreHandle
 }
 
 func (h *StoreHandler) FindAll(c *gin.Context) {
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	storeID, err := helpers.ApplyStoreScope(scope, 0)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stores, err := h.StoreRepository.FindAll(ctx)
+	stores, err := h.StoreRepository.FindAll(ctx, storeID)
 	if err != nil {
 		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get stores", err.Error())
 		return
@@ -40,6 +52,17 @@ func (h *StoreHandler) FindByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid store id", err.Error())
+		return
+	}
+
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, id); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
 		return
 	}
 

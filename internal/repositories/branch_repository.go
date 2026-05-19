@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"pos-saas-backend/internal/helpers"
 	"pos-saas-backend/internal/models"
@@ -19,8 +21,27 @@ func NewBranchRepository(db *sql.DB) *BranchRepository {
 	}
 }
 
-func (r *BranchRepository) FindAll(ctx context.Context) ([]models.Branch, error) {
-	query := `
+func (r *BranchRepository) FindAll(ctx context.Context, storeID int64, branchID int64) ([]models.Branch, error) {
+	whereClauses := []string{
+		"b.deleted_at IS NULL",
+	}
+
+	args := make([]interface{}, 0)
+	argPosition := 1
+
+	if storeID > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("b.store_id = $%d", argPosition))
+		args = append(args, storeID)
+		argPosition++
+	}
+
+	if branchID > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("b.id = $%d", argPosition))
+		args = append(args, branchID)
+		argPosition++
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			b.id,
 			b.store_id,
@@ -34,11 +55,11 @@ func (r *BranchRepository) FindAll(ctx context.Context) ([]models.Branch, error)
 			b.updated_at
 		FROM branches b
 		INNER JOIN stores s ON s.id = b.store_id
-		WHERE b.deleted_at IS NULL
+		WHERE %s
 		ORDER BY b.id ASC
-	`
+	`, strings.Join(whereClauses, " AND "))
 
-	rows, err := r.DB.QueryContext(ctx, query)
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

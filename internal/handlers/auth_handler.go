@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"pos-saas-backend/internal/auth"
 	"pos-saas-backend/internal/helpers"
 	"pos-saas-backend/internal/requests"
 	"pos-saas-backend/internal/responses"
@@ -50,7 +51,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 
-	claims, ok := authUserValue.(*services.AuthClaims)
+	claims, ok := authUserValue.(*auth.Claims)
 	if !ok {
 		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", "invalid auth user claims")
 		return

@@ -39,6 +39,26 @@ func (h *ProductHandler) FindAll(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	storeID, err := helpers.ApplyStoreScope(scope, filter.StoreID)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	branchID, err := helpers.ApplyBranchScope(scope, filter.BranchID)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	filter.StoreID = storeID
+	filter.BranchID = branchID
 	filter = normalizeProductFilter(filter)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -105,6 +125,22 @@ func (h *ProductHandler) Create(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, request.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, request.BranchID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
 	if err := h.handleProductImage(c, &request); err != nil {
 		helpers.ErrorResponse(c, http.StatusBadRequest, "Failed to upload product image", err.Error())
 		return
@@ -136,6 +172,22 @@ func (h *ProductHandler) Update(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, request.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, request.BranchID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
 	if err := h.handleProductImage(c, &request); err != nil {
 		helpers.ErrorResponse(c, http.StatusBadRequest, "Failed to upload product image", err.Error())
 		return
@@ -143,6 +195,27 @@ func (h *ProductHandler) Update(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	existingProduct, err := h.ProductRepository.FindByID(ctx, id)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get product", err.Error())
+		return
+	}
+
+	if existingProduct == nil {
+		helpers.ErrorResponse(c, http.StatusNotFound, "Product not found", "product data not found")
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, existingProduct.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, existingProduct.BranchID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
 
 	product, err := h.ProductRepository.Update(ctx, id, request)
 	if err != nil {

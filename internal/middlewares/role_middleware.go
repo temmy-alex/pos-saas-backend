@@ -3,7 +3,7 @@ package middlewares
 import (
 	"net/http"
 
-	"pos-saas-backend/internal/services"
+	"pos-saas-backend/internal/auth"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +26,7 @@ func (m *RoleMiddleware) RequireRoles(allowedRoles ...string) gin.HandlerFunc {
 			return
 		}
 
-		claims, ok := authUserValue.(*services.AuthClaims)
+		claims, ok := authUserValue.(*auth.Claims)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"status":  "error",

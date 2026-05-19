@@ -44,6 +44,27 @@ func (h *DashboardHandler) Index(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	storeID, err := helpers.ApplyStoreScope(scope, request.StoreID)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	branchID, err := helpers.ApplyBranchScope(scope, request.BranchID)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	request.StoreID = storeID
+	request.BranchID = branchID
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

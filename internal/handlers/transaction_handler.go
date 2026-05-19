@@ -10,7 +10,6 @@ import (
 	"pos-saas-backend/internal/helpers"
 	"pos-saas-backend/internal/repositories"
 	"pos-saas-backend/internal/requests"
-	"pos-saas-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,6 +32,26 @@ func (h *TransactionHandler) FindAll(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	storeID, err := helpers.ApplyStoreScope(scope, filter.StoreID)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	branchID, err := helpers.ApplyBranchScope(scope, filter.BranchID)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	filter.StoreID = storeID
+	filter.BranchID = branchID
 	filter = normalizeTransactionFilter(filter)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -100,22 +119,26 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 		return
 	}
 
-	authUserValue, exists := c.Get("auth_user")
-	if !exists {
-		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", "auth user not found")
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
 		return
 	}
 
-	claims, ok := authUserValue.(*services.AuthClaims)
-	if !ok {
-		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", "invalid auth user claims")
+	if err := helpers.EnsureStoreAccess(scope, request.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, request.BranchID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	transaction, err := h.TransactionRepository.Create(ctx, claims.UserID, request)
+	transaction, err := h.TransactionRepository.Create(ctx, scope.UserID, request)
 	if err != nil {
 		helpers.ErrorResponse(c, http.StatusBadRequest, "Failed to create transaction", err.Error())
 		return
