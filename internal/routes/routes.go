@@ -24,6 +24,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	categoryRepository := repositories.NewCategoryRepository(db)
 	productRepository := repositories.NewProductRepository(db)
 	transactionRepository := repositories.NewTransactionRepository(db)
+	reportRepository := repositories.NewReportRepository(db)
 	userRepository := repositories.NewUserRepository(db)
 
 	storeHandler := handlers.NewStoreHandler(storeRepository)
@@ -33,6 +34,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	localStorageService := services.NewLocalStorageService(appConfig.AppBaseURL)
 	productHandler := handlers.NewProductHandler(productRepository, localStorageService)
 	transactionHandler := handlers.NewTransactionHandler(transactionRepository)
+	reportHandler := handlers.NewReportHandler(reportRepository)
 
 	authService := services.NewAuthService(
 		userRepository,
@@ -197,6 +199,15 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
 				transactionHandler.FindByID,
 			)
+
+			reports := protected.Group("/reports")
+			{
+				reports.GET(
+					"/daily-sales",
+					roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+					reportHandler.DailySales,
+				)
+			}
 		}
 	}
 }

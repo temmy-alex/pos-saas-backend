@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -25,16 +26,46 @@ func NewTransactionHandler(transactionRepository *repositories.TransactionReposi
 }
 
 func (h *TransactionHandler) FindAll(c *gin.Context) {
+	var filter requests.TransactionFilterRequest
+
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid query parameters", err.Error())
+		return
+	}
+
+	filter = normalizeTransactionFilter(filter)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	transactions, err := h.TransactionRepository.FindAll(ctx)
+	transactions, total, err := h.TransactionRepository.FindAll(ctx, filter)
 	if err != nil {
 		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get transactions", err.Error())
 		return
 	}
 
-	helpers.SuccessResponse(c, http.StatusOK, "Transactions retrieved successfully", transactions)
+	totalPages := int64(0)
+	if filter.Limit > 0 {
+		totalPages = int64(math.Ceil(float64(total) / float64(filter.Limit)))
+	}
+
+	helpers.SuccessResponse(c, http.StatusOK, "Transactions retrieved successfully", gin.H{
+		"items": transactions,
+		"pagination": gin.H{
+			"page":        filter.Page,
+			"limit":       filter.Limit,
+			"total":       total,
+			"total_pages": totalPages,
+		},
+		"filters": gin.H{
+			"store_id":       filter.StoreID,
+			"branch_id":      filter.BranchID,
+			"cashier_id":     filter.CashierID,
+			"date":           filter.Date,
+			"payment_method": filter.PaymentMethod,
+			"search":         filter.Search,
+		},
+	})
 }
 
 func (h *TransactionHandler) FindByID(c *gin.Context) {
@@ -91,4 +122,20 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 	}
 
 	helpers.SuccessResponse(c, http.StatusCreated, "Transaction created successfully", transaction)
+}
+
+func normalizeTransactionFilter(filter requests.TransactionFilterRequest) requests.TransactionFilterRequest {
+	if filter.Page <= 0 {
+		filter.Page = 1
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = 10
+	}
+
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+
+	return filter
 }

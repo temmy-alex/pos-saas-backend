@@ -33,8 +33,87 @@ type transactionProductData struct {
 	Stock        int
 }
 
-func (r *TransactionRepository) FindAll(ctx context.Context) ([]models.Transaction, error) {
-	query := `
+func (r *TransactionRepository) FindAll(ctx context.Context, filter requests.TransactionFilterRequest) ([]models.Transaction, int64, error) {
+	whereClauses := []string{
+		"t.deleted_at IS NULL",
+	}
+
+	args := make([]interface{}, 0)
+	argPosition := 1
+
+	if filter.StoreID > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("t.store_id = $%d", argPosition))
+		args = append(args, filter.StoreID)
+		argPosition++
+	}
+
+	if filter.BranchID > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("t.branch_id = $%d", argPosition))
+		args = append(args, filter.BranchID)
+		argPosition++
+	}
+
+	if filter.CashierID > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("t.cashier_id = $%d", argPosition))
+		args = append(args, filter.CashierID)
+		argPosition++
+	}
+
+	if strings.TrimSpace(filter.Date) != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("DATE(t.transaction_date AT TIME ZONE 'Asia/Jakarta') = $%d", argPosition))
+		args = append(args, strings.TrimSpace(filter.Date))
+		argPosition++
+	}
+
+	if strings.TrimSpace(filter.PaymentMethod) != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("t.payment_method = $%d", argPosition))
+		args = append(args, strings.ToLower(strings.TrimSpace(filter.PaymentMethod)))
+		argPosition++
+	}
+
+	if strings.TrimSpace(filter.Search) != "" {
+		whereClauses = append(
+			whereClauses,
+			fmt.Sprintf("(t.transaction_number ILIKE $%d OR t.customer_name ILIKE $%d)", argPosition, argPosition),
+		)
+
+		args = append(args, "%"+strings.TrimSpace(filter.Search)+"%")
+		argPosition++
+	}
+
+	whereSQL := strings.Join(whereClauses, " AND ")
+
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM transactions t
+		WHERE %s
+	`, whereSQL)
+
+	var total int64
+
+	if err := r.DB.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	if limit > 100 {
+		limit = 100
+	}
+
+	page := filter.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	offset := (page - 1) * limit
+
+	queryArgs := append(args, limit, offset)
+
+	query := fmt.Sprintf(`
 		SELECT
 			t.id,
 
@@ -70,13 +149,14 @@ func (r *TransactionRepository) FindAll(ctx context.Context) ([]models.Transacti
 		INNER JOIN stores s ON s.id = t.store_id
 		INNER JOIN branches b ON b.id = t.branch_id
 		INNER JOIN users u ON u.id = t.cashier_id
-		WHERE t.deleted_at IS NULL
+		WHERE %s
 		ORDER BY t.id DESC
-	`
+		LIMIT $%d OFFSET $%d
+	`, whereSQL, argPosition, argPosition+1)
 
-	rows, err := r.DB.QueryContext(ctx, query)
+	rows, err := r.DB.QueryContext(ctx, query, queryArgs...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -85,17 +165,17 @@ func (r *TransactionRepository) FindAll(ctx context.Context) ([]models.Transacti
 	for rows.Next() {
 		transaction, err := scanTransaction(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		transactions = append(transactions, *transaction)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return transactions, nil
+	return transactions, total, nil
 }
 
 func (r *TransactionRepository) FindByID(ctx context.Context, id int64) (*models.Transaction, error) {
