@@ -9,6 +9,14 @@ bin/
 *.test
 coverage.out
 
+# Uploads
+uploads/*
+
+# Keep upload folders
+!uploads/.gitkeep
+!uploads/products/
+!uploads/products/.gitkeep
+
 # Docker / Logs
 *.log
 

@@ -27,6 +27,8 @@ func main() {
 
 	router := gin.Default()
 
+	router.Static("/uploads", "./uploads")
+
 	routes.RegisterRoutes(router, db)
 
 	serverAddress := fmt.Sprintf(":%s", appConfig.AppPort)
@@ -35,6 +37,7 @@ func main() {
 	log.Println("Application :", appConfig.AppName)
 	log.Println("Environment :", appConfig.AppEnv)
 	log.Println("Port        :", appConfig.AppPort)
+	log.Println("Base URL    :", appConfig.AppBaseURL)
 	log.Println("Database    :", databaseConfig.Database)
 	log.Println("DB Host     :", databaseConfig.Host)
 	log.Println("======================================")

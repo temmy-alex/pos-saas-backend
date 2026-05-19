@@ -13,6 +13,7 @@ import (
 )
 
 func RegisterRoutes(router *gin.Engine, db *sql.DB) {
+	appConfig := config.LoadAppConfig()
 	jwtConfig := config.LoadJWTConfig()
 
 	healthHandler := handlers.NewHealthHandler()
@@ -21,11 +22,15 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	storeRepository := repositories.NewStoreRepository(db)
 	branchRepository := repositories.NewBranchRepository(db)
 	categoryRepository := repositories.NewCategoryRepository(db)
+	productRepository := repositories.NewProductRepository(db)
 	userRepository := repositories.NewUserRepository(db)
 
 	storeHandler := handlers.NewStoreHandler(storeRepository)
 	branchHandler := handlers.NewBranchHandler(branchRepository)
 	categoryHandler := handlers.NewCategoryHandler(categoryRepository)
+
+	localStorageService := services.NewLocalStorageService(appConfig.AppBaseURL)
+	productHandler := handlers.NewProductHandler(productRepository, localStorageService)
 
 	authService := services.NewAuthService(
 		userRepository,
@@ -141,6 +146,36 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 				"/categories/:id",
 				roleMiddleware.RequireRoles("superadmin", "admin"),
 				categoryHandler.Delete,
+			)
+
+			protected.GET(
+				"/products",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				productHandler.FindAll,
+			)
+
+			protected.POST(
+				"/products",
+				roleMiddleware.RequireRoles("superadmin", "admin"),
+				productHandler.Create,
+			)
+
+			protected.GET(
+				"/products/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				productHandler.FindByID,
+			)
+
+			protected.PUT(
+				"/products/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin"),
+				productHandler.Update,
+			)
+
+			protected.DELETE(
+				"/products/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin"),
+				productHandler.Delete,
 			)
 		}
 	}
