@@ -209,6 +209,12 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 			)
 
 			protected.GET(
+				"/transactions/:id/receipt",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				transactionHandler.Receipt,
+			)
+
+			protected.GET(
 				"/transactions/:id",
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
 				transactionHandler.FindByID,

@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"pos-saas-backend/internal/helpers"
+	"pos-saas-backend/internal/models"
 	"pos-saas-backend/internal/repositories"
 	"pos-saas-backend/internal/requests"
+	"pos-saas-backend/internal/responses"
 
 	"github.com/gin-gonic/gin"
 )
@@ -127,6 +129,48 @@ func (h *TransactionHandler) FindByID(c *gin.Context) {
 	helpers.SuccessResponse(c, http.StatusOK, "Transaction retrieved successfully", transaction)
 }
 
+func (h *TransactionHandler) Receipt(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid transaction id", err.Error())
+		return
+	}
+
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	transaction, err := h.TransactionRepository.FindByID(ctx, id)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get transaction receipt", err.Error())
+		return
+	}
+
+	if transaction == nil {
+		helpers.ErrorResponse(c, http.StatusNotFound, "Transaction not found", "transaction data not found")
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, transaction.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, transaction.BranchID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	receipt := buildReceiptResponse(transaction)
+
+	helpers.SuccessResponse(c, http.StatusOK, "Transaction receipt retrieved successfully", receipt)
+}
+
 func (h *TransactionHandler) Create(c *gin.Context) {
 	var request requests.TransactionRequest
 
@@ -235,4 +279,72 @@ func normalizeTransactionFilter(filter requests.TransactionFilterRequest) reques
 	}
 
 	return filter
+}
+
+func buildReceiptResponse(transaction *models.Transaction) responses.ReceiptResponse {
+	items := make([]responses.ReceiptItem, 0)
+
+	for _, item := range transaction.Items {
+		grossTotal := item.Price * float64(item.Qty)
+
+		items = append(items, responses.ReceiptItem{
+			ID:          item.ID,
+			ProductID:   item.ProductID,
+			ProductName: item.ProductNameSnapshot,
+			ProductSKU:  item.ProductSKUSnapshot,
+			Qty:         item.Qty,
+			Price:       item.Price,
+			GrossTotal:  grossTotal,
+			Discount:    item.Discount,
+			Subtotal:    item.Subtotal,
+		})
+	}
+
+	var voidInfo *responses.ReceiptVoid
+
+	if transaction.Status == "void" {
+		voidInfo = &responses.ReceiptVoid{
+			VoidReason:   transaction.VoidReason,
+			VoidedAt:     transaction.VoidedAt,
+			VoidedBy:     transaction.VoidedBy,
+			VoidedByName: transaction.VoidedByName,
+		}
+	}
+
+	return responses.ReceiptResponse{
+		Store: responses.ReceiptStore{
+			ID:   transaction.StoreID,
+			Name: transaction.StoreName,
+		},
+		Branch: responses.ReceiptBranch{
+			ID:   transaction.BranchID,
+			Name: transaction.BranchName,
+		},
+		Cashier: responses.ReceiptCashier{
+			ID:   transaction.CashierID,
+			Name: transaction.CashierName,
+		},
+		Transaction: responses.ReceiptTransaction{
+			ID:                transaction.ID,
+			TransactionNumber: transaction.TransactionNumber,
+			TransactionDate:   transaction.TransactionDate,
+			CustomerName:      transaction.CustomerName,
+			Status:            transaction.Status,
+			Notes:             transaction.Notes,
+		},
+		Items: items,
+		Summary: responses.ReceiptSummary{
+			Subtotal:      transaction.Subtotal,
+			DiscountTotal: transaction.DiscountTotal,
+			GrandTotal:    transaction.GrandTotal,
+		},
+		Payment: responses.ReceiptPayment{
+			PaymentMethod:  transaction.PaymentMethod,
+			CashAmount:     transaction.CashAmount,
+			TransferAmount: transaction.TransferAmount,
+			PaidAmount:     transaction.CashAmount + transaction.TransferAmount,
+			ChangeAmount:   transaction.ChangeAmount,
+		},
+		Void: voidInfo,
+	}
 }
