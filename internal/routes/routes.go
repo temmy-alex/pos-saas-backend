@@ -202,6 +202,12 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 				transactionHandler.Create,
 			)
 
+			protected.POST(
+				"/transactions/:id/void",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				transactionHandler.Void,
+			)
+
 			protected.GET(
 				"/transactions/:id",
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),

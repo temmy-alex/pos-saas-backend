@@ -296,6 +296,11 @@ func (r *DashboardRepository) GetRecentTransactions(ctx context.Context, request
 			t.notes,
 			t.status,
 
+			t.void_reason,
+			t.voided_at,
+			t.voided_by,
+			vu.name AS voided_by_name,
+
 			t.transaction_date,
 			t.created_at,
 			t.updated_at
@@ -303,6 +308,7 @@ func (r *DashboardRepository) GetRecentTransactions(ctx context.Context, request
 		INNER JOIN stores s ON s.id = t.store_id
 		INNER JOIN branches b ON b.id = t.branch_id
 		INNER JOIN users u ON u.id = t.cashier_id
+		LEFT JOIN users vu ON vu.id = t.voided_by
 		WHERE %s
 		ORDER BY t.id DESC
 		LIMIT 5

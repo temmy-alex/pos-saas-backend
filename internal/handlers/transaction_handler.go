@@ -94,6 +94,12 @@ func (h *TransactionHandler) FindByID(c *gin.Context) {
 		return
 	}
 
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -105,6 +111,16 @@ func (h *TransactionHandler) FindByID(c *gin.Context) {
 
 	if transaction == nil {
 		helpers.ErrorResponse(c, http.StatusNotFound, "Transaction not found", "transaction data not found")
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, transaction.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, transaction.BranchID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
 		return
 	}
 
@@ -145,6 +161,64 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 	}
 
 	helpers.SuccessResponse(c, http.StatusCreated, "Transaction created successfully", transaction)
+}
+
+func (h *TransactionHandler) Void(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid transaction id", err.Error())
+		return
+	}
+
+	var request requests.VoidTransactionRequest
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		helpers.ErrorResponse(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+		return
+	}
+
+	scope, err := helpers.GetAuthScope(c)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	existingTransaction, err := h.TransactionRepository.FindByID(ctx, id)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusInternalServerError, "Failed to get transaction", err.Error())
+		return
+	}
+
+	if existingTransaction == nil {
+		helpers.ErrorResponse(c, http.StatusNotFound, "Transaction not found", "transaction data not found")
+		return
+	}
+
+	if err := helpers.EnsureStoreAccess(scope, existingTransaction.StoreID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	if err := helpers.EnsureBranchAccess(scope, existingTransaction.BranchID); err != nil {
+		helpers.ErrorResponse(c, http.StatusForbidden, "Forbidden", err.Error())
+		return
+	}
+
+	transaction, err := h.TransactionRepository.Void(ctx, id, scope.UserID, request.Reason)
+	if err != nil {
+		helpers.ErrorResponse(c, http.StatusBadRequest, "Failed to void transaction", err.Error())
+		return
+	}
+
+	if transaction == nil {
+		helpers.ErrorResponse(c, http.StatusNotFound, "Transaction not found", "transaction data not found")
+		return
+	}
+
+	helpers.SuccessResponse(c, http.StatusOK, "Transaction voided successfully", transaction)
 }
 
 func normalizeTransactionFilter(filter requests.TransactionFilterRequest) requests.TransactionFilterRequest {

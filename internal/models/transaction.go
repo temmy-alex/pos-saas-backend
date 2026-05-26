@@ -30,6 +30,11 @@ type Transaction struct {
 	Notes  *string `json:"notes"`
 	Status string  `json:"status"`
 
+	VoidReason   *string    `json:"void_reason"`
+	VoidedAt     *time.Time `json:"voided_at"`
+	VoidedBy     *int64     `json:"voided_by"`
+	VoidedByName *string    `json:"voided_by_name"`
+
 	TransactionDate time.Time `json:"transaction_date"`
 
 	Items []TransactionItem `json:"items,omitempty"`

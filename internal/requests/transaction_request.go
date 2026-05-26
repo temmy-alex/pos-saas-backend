@@ -20,3 +20,7 @@ type TransactionItemRequest struct {
 	Qty       int     `json:"qty" binding:"required,gte=1"`
 	Discount  float64 `json:"discount"`
 }
+
+type VoidTransactionRequest struct {
+	Reason string `json:"reason" binding:"required"`
+}

@@ -60,7 +60,7 @@ func (r *TransactionRepository) FindAll(ctx context.Context, filter requests.Tra
 	}
 
 	if strings.TrimSpace(filter.Date) != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("DATE(t.transaction_date AT TIME ZONE 'Asia/Jakarta') = $%d", argPosition))
+		whereClauses = append(whereClauses, fmt.Sprintf("DATE(t.transaction_date AT TIME ZONE 'Asia/Jakarta') = $%d::DATE", argPosition))
 		args = append(args, strings.TrimSpace(filter.Date))
 		argPosition++
 	}
@@ -142,6 +142,11 @@ func (r *TransactionRepository) FindAll(ctx context.Context, filter requests.Tra
 			t.notes,
 			t.status,
 
+			t.void_reason,
+			t.voided_at,
+			t.voided_by,
+			vu.name AS voided_by_name,
+
 			t.transaction_date,
 			t.created_at,
 			t.updated_at
@@ -149,6 +154,7 @@ func (r *TransactionRepository) FindAll(ctx context.Context, filter requests.Tra
 		INNER JOIN stores s ON s.id = t.store_id
 		INNER JOIN branches b ON b.id = t.branch_id
 		INNER JOIN users u ON u.id = t.cashier_id
+		LEFT JOIN users vu ON vu.id = t.voided_by
 		WHERE %s
 		ORDER BY t.id DESC
 		LIMIT $%d OFFSET $%d
@@ -208,6 +214,11 @@ func (r *TransactionRepository) FindByID(ctx context.Context, id int64) (*models
 			t.notes,
 			t.status,
 
+			t.void_reason,
+			t.voided_at,
+			t.voided_by,
+			vu.name AS voided_by_name,
+
 			t.transaction_date,
 			t.created_at,
 			t.updated_at
@@ -215,6 +226,7 @@ func (r *TransactionRepository) FindByID(ctx context.Context, id int64) (*models
 		INNER JOIN stores s ON s.id = t.store_id
 		INNER JOIN branches b ON b.id = t.branch_id
 		INNER JOIN users u ON u.id = t.cashier_id
+		LEFT JOIN users vu ON vu.id = t.voided_by
 		WHERE t.id = $1
 		AND t.deleted_at IS NULL
 		LIMIT 1
@@ -518,6 +530,151 @@ func (r *TransactionRepository) Create(ctx context.Context, cashierID int64, req
 	return r.FindByID(ctx, transactionID)
 }
 
+func (r *TransactionRepository) Void(ctx context.Context, transactionID int64, voidedBy int64, reason string) (*models.Transaction, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return nil, errors.New("void reason is required")
+	}
+
+	tx, err := r.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var status string
+
+	checkTransactionQuery := `
+		SELECT status
+		FROM transactions
+		WHERE id = $1
+		AND deleted_at IS NULL
+		FOR UPDATE
+	`
+
+	err = tx.QueryRowContext(ctx, checkTransactionQuery, transactionID).Scan(&status)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	if status == "void" {
+		err = errors.New("transaction already voided")
+		return nil, err
+	}
+
+	if status != "paid" {
+		err = errors.New("only paid transaction can be voided")
+		return nil, err
+	}
+
+	itemsQuery := `
+		SELECT
+			product_id,
+			qty
+		FROM transaction_items
+		WHERE transaction_id = $1
+		AND deleted_at IS NULL
+	`
+
+	rows, err := tx.QueryContext(ctx, itemsQuery, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type voidItem struct {
+		ProductID int64
+		Qty       int
+	}
+
+	items := make([]voidItem, 0)
+
+	for rows.Next() {
+		var item voidItem
+
+		err = rows.Scan(
+			&item.ProductID,
+			&item.Qty,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(items, item)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(items) == 0 {
+		err = errors.New("transaction items not found")
+		return nil, err
+	}
+
+	restoreStockQuery := `
+		UPDATE products
+		SET
+			stock = stock + $1,
+			updated_at = NOW()
+		WHERE id = $2
+		AND deleted_at IS NULL
+	`
+
+	for _, item := range items {
+		_, err = tx.ExecContext(
+			ctx,
+			restoreStockQuery,
+			item.Qty,
+			item.ProductID,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	voidTransactionQuery := `
+		UPDATE transactions
+		SET
+			status = 'void',
+			void_reason = $1,
+			voided_at = NOW(),
+			voided_by = $2,
+			updated_at = NOW()
+		WHERE id = $3
+		AND deleted_at IS NULL
+	`
+
+	_, err = tx.ExecContext(
+		ctx,
+		voidTransactionQuery,
+		reason,
+		voidedBy,
+		transactionID,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return r.FindByID(ctx, transactionID)
+}
+
 func (r *TransactionRepository) findProductForUpdate(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -571,6 +728,10 @@ func scanTransactionRow(scanner transactionScanner) (*models.Transaction, error)
 
 	var customerName sql.NullString
 	var notes sql.NullString
+	var voidReason sql.NullString
+	var voidedAt sql.NullTime
+	var voidedBy sql.NullInt64
+	var voidedByName sql.NullString
 
 	err := scanner.Scan(
 		&transaction.ID,
@@ -600,6 +761,11 @@ func scanTransactionRow(scanner transactionScanner) (*models.Transaction, error)
 		&notes,
 		&transaction.Status,
 
+		&voidReason,
+		&voidedAt,
+		&voidedBy,
+		&voidedByName,
+
 		&transaction.TransactionDate,
 		&transaction.CreatedAt,
 		&transaction.UpdatedAt,
@@ -611,6 +777,10 @@ func scanTransactionRow(scanner transactionScanner) (*models.Transaction, error)
 
 	transaction.CustomerName = helpers.NullableString(customerName)
 	transaction.Notes = helpers.NullableString(notes)
+	transaction.VoidReason = helpers.NullableString(voidReason)
+	transaction.VoidedAt = helpers.NullableTime(voidedAt)
+	transaction.VoidedBy = helpers.NullableInt64(voidedBy)
+	transaction.VoidedByName = helpers.NullableString(voidedByName)
 
 	return &transaction, nil
 }
