@@ -13,9 +13,34 @@ services:
       - pos_saas_postgres_data:/var/lib/postgresql/data
     networks:
       - pos_saas_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos_user -d pos_saas_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pos-saas-backend:local
+    container_name: pos_saas_backend
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    ports:
+      - "8080:8080"
+    volumes:
+      - pos_saas_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pos_saas_network
 
 volumes:
   pos_saas_postgres_data:
+  pos_saas_uploads:
 
 networks:
   pos_saas_network:
