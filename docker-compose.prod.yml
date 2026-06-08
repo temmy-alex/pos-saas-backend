@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pos_saas_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pos_saas_postgres_data:/var/lib/postgresql/data
+    networks:
+      - pos_saas_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pos-saas-backend:production
+    container_name: pos_saas_backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    expose:
+      - "8080"
+    volumes:
+      - pos_saas_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pos_saas_network
+
+volumes:
+  pos_saas_postgres_data:
+  pos_saas_uploads:
+
+networks:
+  pos_saas_network:
+    driver: bridge
