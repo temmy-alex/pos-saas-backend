@@ -23,6 +23,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	branchRepository := repositories.NewBranchRepository(db)
 	categoryRepository := repositories.NewCategoryRepository(db)
 	productRepository := repositories.NewProductRepository(db)
+	customerRepository := repositories.NewCustomerRepository(db)
 	transactionRepository := repositories.NewTransactionRepository(db)
 	reportRepository := repositories.NewReportRepository(db)
 	dashboardRepository := repositories.NewDashboardRepository(db)
@@ -34,6 +35,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 
 	localStorageService := services.NewLocalStorageService(appConfig.AppBaseURL)
 	productHandler := handlers.NewProductHandler(productRepository, localStorageService)
+	customerHandler := handlers.NewCustomerHandler(customerRepository, branchRepository)
 	transactionHandler := handlers.NewTransactionHandler(transactionRepository)
 	reportHandler := handlers.NewReportHandler(reportRepository)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardRepository)
@@ -64,6 +66,18 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 		protected := api.Group("")
 		protected.Use(authMiddleware.RequireAuth())
 		{
+			protected.GET(
+				"/master/customers",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				customerHandler.FindAllMobile,
+			)
+
+			protected.POST(
+				"/master/customers",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				customerHandler.CreateMobile,
+			)
+
 			protected.GET(
 				"/dashboard",
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
@@ -188,6 +202,36 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 				"/products/:id",
 				roleMiddleware.RequireRoles("superadmin", "admin"),
 				productHandler.Delete,
+			)
+
+			protected.GET(
+				"/customers",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				customerHandler.FindAll,
+			)
+
+			protected.POST(
+				"/customers",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				customerHandler.Create,
+			)
+
+			protected.GET(
+				"/customers/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				customerHandler.FindByID,
+			)
+
+			protected.PUT(
+				"/customers/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin"),
+				customerHandler.Update,
+			)
+
+			protected.DELETE(
+				"/customers/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin"),
+				customerHandler.Delete,
 			)
 
 			protected.GET(

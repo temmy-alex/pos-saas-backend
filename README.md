@@ -52,6 +52,7 @@ Aturan akses data:
 - Product CRUD
 - Upload image product secara local
 - Product filter, search, dan pagination
+- Customer CRUD, search, pagination, dan mobile-compatible API
 
 ### POS Transaction
 
