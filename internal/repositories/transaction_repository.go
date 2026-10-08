@@ -330,6 +330,10 @@ func (r *TransactionRepository) Create(ctx context.Context, cashierID int64, req
 		}
 	}()
 
+	if err = ensureStoreRegisterOpen(ctx, tx, request.StoreID, request.BranchID); err != nil {
+		return nil, err
+	}
+
 	transactionNumber, err := generateTransactionNumber()
 	if err != nil {
 		return nil, err
@@ -528,6 +532,28 @@ func (r *TransactionRepository) Create(ctx context.Context, cashierID int64, req
 	}
 
 	return r.FindByID(ctx, transactionID)
+}
+
+func ensureStoreRegisterOpen(ctx context.Context, tx *sql.Tx, storeID, branchID int64) error {
+	var isOpen bool
+	err := tx.QueryRowContext(ctx, `
+		SELECT is_open
+		FROM store_statuses
+		WHERE store_id = $1
+		AND branch_id = $2
+		AND business_date = DATE(NOW() AT TIME ZONE 'Asia/Jakarta')
+		FOR UPDATE
+	`, storeID, branchID).Scan(&isOpen)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrStoreNotOpen
+		}
+		return err
+	}
+	if !isOpen {
+		return ErrStoreNotOpen
+	}
+	return nil
 }
 
 func (r *TransactionRepository) Void(ctx context.Context, transactionID int64, voidedBy int64, reason string) (*models.Transaction, error) {

@@ -24,6 +24,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	categoryRepository := repositories.NewCategoryRepository(db)
 	productRepository := repositories.NewProductRepository(db)
 	customerRepository := repositories.NewCustomerRepository(db)
+	storeStatusRepository := repositories.NewStoreStatusRepository(db)
 	transactionRepository := repositories.NewTransactionRepository(db)
 	reportRepository := repositories.NewReportRepository(db)
 	dashboardRepository := repositories.NewDashboardRepository(db)
@@ -36,6 +37,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	localStorageService := services.NewLocalStorageService(appConfig.AppBaseURL)
 	productHandler := handlers.NewProductHandler(productRepository, localStorageService)
 	customerHandler := handlers.NewCustomerHandler(customerRepository, branchRepository)
+	storeStatusHandler := handlers.NewStoreStatusHandler(storeStatusRepository, branchRepository)
 	transactionHandler := handlers.NewTransactionHandler(transactionRepository)
 	reportHandler := handlers.NewReportHandler(reportRepository)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardRepository)
@@ -66,6 +68,24 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 		protected := api.Group("")
 		protected.Use(authMiddleware.RequireAuth())
 		{
+			protected.GET(
+				"/store/status",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				storeStatusHandler.Status,
+			)
+
+			protected.POST(
+				"/store/open",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				storeStatusHandler.Open,
+			)
+
+			protected.POST(
+				"/store/close",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				storeStatusHandler.Close,
+			)
+
 			protected.GET(
 				"/master/customers",
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),

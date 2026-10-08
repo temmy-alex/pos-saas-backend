@@ -53,6 +53,7 @@ Aturan akses data:
 - Upload image product secara local
 - Product filter, search, dan pagination
 - Customer CRUD, search, pagination, dan mobile-compatible API
+- Store open/close, daily cash register, dan cash reconciliation
 
 ### POS Transaction
 
