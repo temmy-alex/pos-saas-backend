@@ -54,6 +54,7 @@ Aturan akses data:
 - Product filter, search, dan pagination
 - Customer CRUD, search, pagination, dan mobile-compatible API
 - Store open/close, daily cash register, dan cash reconciliation
+- Stock opname draft, approval, stock adjustment, dan audit trail
 
 ### POS Transaction
 

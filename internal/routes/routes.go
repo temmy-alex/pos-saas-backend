@@ -25,6 +25,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	productRepository := repositories.NewProductRepository(db)
 	customerRepository := repositories.NewCustomerRepository(db)
 	storeStatusRepository := repositories.NewStoreStatusRepository(db)
+	stockOpnameRepository := repositories.NewStockOpnameRepository(db)
 	transactionRepository := repositories.NewTransactionRepository(db)
 	reportRepository := repositories.NewReportRepository(db)
 	dashboardRepository := repositories.NewDashboardRepository(db)
@@ -38,6 +39,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	productHandler := handlers.NewProductHandler(productRepository, localStorageService)
 	customerHandler := handlers.NewCustomerHandler(customerRepository, branchRepository)
 	storeStatusHandler := handlers.NewStoreStatusHandler(storeStatusRepository, branchRepository)
+	stockOpnameHandler := handlers.NewStockOpnameHandler(stockOpnameRepository, branchRepository)
 	transactionHandler := handlers.NewTransactionHandler(transactionRepository)
 	reportHandler := handlers.NewReportHandler(reportRepository)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardRepository)
@@ -68,6 +70,42 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 		protected := api.Group("")
 		protected.Use(authMiddleware.RequireAuth())
 		{
+			protected.GET(
+				"/master/stock-opnames",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				stockOpnameHandler.FindAllMobile,
+			)
+
+			protected.GET(
+				"/stock-opnames",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				stockOpnameHandler.FindAll,
+			)
+
+			protected.POST(
+				"/stock-opnames",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				stockOpnameHandler.Create,
+			)
+
+			protected.GET(
+				"/stock-opnames/:id",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				stockOpnameHandler.FindByID,
+			)
+
+			protected.POST(
+				"/stock-opnames/:id/complete",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				stockOpnameHandler.Complete,
+			)
+
+			protected.POST(
+				"/stock-opnames/:id/cancel",
+				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
+				stockOpnameHandler.Cancel,
+			)
+
 			protected.GET(
 				"/store/status",
 				roleMiddleware.RequireRoles("superadmin", "admin", "cashier"),
